@@ -35,7 +35,6 @@ sub insert_message {
 my @urls = ('http://peterstuifzand.nl/status/api.php');
 my %last_check;
 
-
 sub update {
     my ($simplelist) = @_;
 
@@ -96,7 +95,7 @@ for ($col->get_cell_renderers()) {
 }
 
 update($simplelist);
-Glib::Timeout->add(15000, sub { update($simplelist); return 1});
+Glib::Timeout->add(120000, sub { update($simplelist); return 1});
 
 Gtk2->main();
 

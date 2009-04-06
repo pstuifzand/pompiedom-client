@@ -1,0 +1,11 @@
+WARNING
+=======
+
+Alpha software. Use at your own risk.
+
+Uses GladeXML
+
+This program currently receives messages from multiple URLs and combines them
+in one list.
+
+The post functionality and the statusbar information are not working.
