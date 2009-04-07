@@ -7,19 +7,55 @@ use Gtk2 -init;
 use Gtk2::GladeXML;
 use Gtk2::SimpleList;
 use LWP::Simple qw/get/;
-
-sub on_mainwindow_delete_event {
-    Gtk2->main_quit();
-}
-
-sub on_send_message {
-    my $self = shift;
-    print "send message\n";
-    return;
-}
+use LWP::UserAgent;
+use YAML qw/LoadFile DumpFile/;
 
 my @global_messages;
 my %uniques;
+my %last_check;
+
+my $settings;
+
+sub save_messages {
+    DumpFile('messages.yml', {
+        messages => \@global_messages,
+        last_check => \%last_check,
+    });
+
+    DumpFile('settings.yml', $settings);
+    return;
+}
+
+sub load_messages {
+    my $messages = eval { LoadFile('messages.yml') } || { messages => [], last_check => {} };
+
+    @global_messages = @{$messages->{messages}};
+
+    for (@global_messages) {
+        $uniques{$_->{id}} = 1;
+    }
+
+    %last_check      = %{$messages->{last_check}};
+
+    $settings = eval { LoadFile('settings.yml') } || {
+        urls => [ 
+            'http://peterstuifzand.nl/status/api.php' 
+        ],
+        update_speed => 120000,
+        self_url => '',
+        post_domain => '',
+        post_realm => '',
+        post_username => '',
+        post_password => '',
+    };
+
+    return;
+}
+
+sub on_mainwindow_delete_event {
+    save_messages();
+    Gtk2->main_quit();
+}
 
 sub insert_message {
     my ($message) = @_;
@@ -32,13 +68,10 @@ sub insert_message {
     return;
 }
 
-my @urls = ('http://peterstuifzand.nl/status/api.php');
-my %last_check;
-
 sub update {
     my ($simplelist) = @_;
 
-    for (@urls) {
+    for (@{$settings->{urls}}) {
         get_messages($_, $last_check{$_});
     }
 
@@ -79,7 +112,28 @@ sub get_messages {
     return;
 }
 
+sub post_message {
+    my ($url, $message, $user, $password) = @_;
+
+    my $ua = LWP::UserAgent->new;
+
+    my $req = HTTP::Request->new(POST => $url);
+    $ua->credentials($settings->{post_domain}, $settings->{post_realm}, $user, $password);
+    $req->content_type('application/x-www-form-urlencoded');
+    $req->content("message=$message");
+
+    my $res = $ua->request($req);
+    print $res->as_string;
+
+
+    return;
+}
+
 my $gladexml = Gtk2::GladeXML->new('pompiedomclient.glade');
+my $window = $gladexml->get_widget('mainwindow');
+$window->set_size_request(300, 300);
+$window->resize(300,600);
+
 $gladexml->signal_autoconnect_from_package('main');
 
 my $simplelist = Gtk2::SimpleList->new_from_treeview (
@@ -91,11 +145,26 @@ my $col = $simplelist->get_column(0);
 
 for ($col->get_cell_renderers()) {
     $_->set_property('wrap-mode', 'word');
-    $_->set_property('wrap-width', 500);
+    $_->set_property('wrap-width', 260);
 }
 
+load_messages();
+
 update($simplelist);
-Glib::Timeout->add(120000, sub { update($simplelist); return 1});
+Glib::Timeout->add($settings->{update_speed}, sub { update($simplelist); return 1});
 
 Gtk2->main();
 
+sub on_send_message {
+    my $self = shift;
+    print "send message\n";
+
+    my $entry = $gladexml->get_widget('entry1');
+    my $message = $entry->get_text();
+
+    post_message($settings->{self_url}, $message, $settings->{post_username}, $settings->{post_password});
+
+    $entry->set_text('');
+
+    return;
+}
