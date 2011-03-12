@@ -49,6 +49,7 @@
 		  <property name="shadow_type">GTK_SHADOW_IN</property>
 		  <property name="window_placement">GTK_CORNER_TOP_LEFT</property>
 
+          <!--
 		  <child>
 		    <widget class="GtkTreeView" id="treeview2">
 		      <property name="visible">True</property>
@@ -62,6 +63,7 @@
 		      <property name="hover_expand">False</property>
 		    </widget>
 		  </child>
+          -->
 		</widget>
 		<packing>
 		  <property name="padding">0</property>
