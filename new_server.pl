@@ -1,55 +1,66 @@
 #!/usr/bin/perl -w
+use strict;
+use warnings;
+
 use 5.10.0;
 use lib 'lib';
-use Gtk2 -init;
+
+use Data::Dumper;
+
+use ZeroMQ qw(:all);
+use POE::Wheel::ZeroMQ;
+
+use POE;
 
 use YAML 'LoadFile';
-use POE qw( Loop::Glib );
 use POEx::HTTP::Server;
-use Pompiedom::Client;
 use Pompiedom::POE::RSS;
 use POE::Component::Client::HTTP;
 use POE::Component::Client::Keepalive;
 use Pompiedom::Subscriptions;
 use URI::Escape;
 
+use JSON;
+use Log::Dispatch;
+
+my $version_string = ZeroMQ::version();
+print "Starting with ZMQ $version_string\n";
+my $log = Log::Dispatch->new(
+    outputs => [
+        [ 'Screen', min_level => 'debug', stderr => 1 ],
+        [ 'File',   min_level => 'debug', filename => 'pompiedom.log' ],
+    ],
+);
+
+$log->warning("Loading settings.yml\n");
 my $settings = LoadFile('settings.yml');
 
-Pompiedom::Client->new();
-
+$log->info("Spawning POEx::HTTP::Server ");
 POEx::HTTP::Server->spawn(
     inet => {
         BindPort => 5337,
         Reuse    => 1,
     },
-    options => {
-#        trace => 1,
-    },
-    #concurrency => 1,
     handlers => {
         '^/notify$', 'poe:subscriptions/notify',
     },
 );
+$log->info("done\n");
 
-#my $pool = POE::Component::Client::Keepalive->new(
-#    keep_alive    => 1, # seconds to keep connections alive
-#    max_open      => 1, # max concurrent connections - total
-#    max_per_host  => 1, # max concurrent connections - per host
-#    timeout       => 1, # max time (seconds) to establish a new connection
-#);
-
+$log->info("Spawning POE::Component::Client::HTTP ");
 POE::Component::Client::HTTP->spawn(
-    Alias             => 'ua',
-#    Timeout           => 10,
-#    ConnectionManager => $pool,
-#    Protocol          => 'HTTP/0.9',
+    Alias => 'ua',
 );
+$log->info("done\n");
 
+$log->info("Spawning Pompiedom::POE::RSS ");
 Pompiedom::POE::RSS->spawn(
-    output_alias => 'pompiedom',
+    output_alias => 'to_client',
     %{$settings}
 );
+$log->info("done\n");
 
+$log->info("Spawning POE::Session(subscriptions) ");
 POE::Session->create(
     inline_states => {
         _start => sub {
@@ -59,9 +70,17 @@ POE::Session->create(
             my $subs = Pompiedom::Subscriptions->new();
             $heap->{subscriptions} = $subs;
 
-            $subs->load_subscriptions();
+            $kernel->delay('init_subscriptions', 3);
+        },
 
-            for ($subs->subscriptions) {
+        init_subscriptions => sub {
+            my ($kernel, $heap) = @_[KERNEL, HEAP];
+
+            $log->info("[init_subscriptions]\n");
+            $heap->{subscriptions}->load_subscriptions();
+
+            for ($heap->{subscriptions}->subscriptions) {
+                $log->info("Update feed " . Dumper($_));
                 $kernel->yield('update_feed', $_);
             }
         },
@@ -131,6 +150,56 @@ POE::Session->create(
         },
     },
 );
+$log->info("done\n");
 
-$poe_kernel->run();
+$log->info("Spawning POE::Session(expected: to_client)\n");
+POE::Session->create(
+    heap => { alias => 'to_client' },
+
+    inline_states => {
+        _start => sub {
+            my ($kernel, $heap) = @_[KERNEL,HEAP];
+            $log->info("Starting POE::Session(".$heap->{alias}.")\n");
+
+            $kernel->alias_set($heap->{alias});
+
+            my $ctx = ZeroMQ::Context->new();
+
+            $log->info("  Spawning POE::Wheel::ZeroMQ\n");
+            $heap->{wheel} = POE::Wheel::ZeroMQ->new(
+                SocketType => ZMQ_PUB,
+                SocketBind => 'tcp://127.0.0.1:55559',
+                Context    => $ctx,
+            );
+            $log->info("  Done\n");
+
+            $heap->{ctx} = $ctx;
+
+            $log->info(" Done\n");
+
+        },
+
+        _stop => sub {
+            $_[HEAP]->{ctx}->term;
+        },
+
+        insert_message => sub {
+            my ($kernel, $heap, $message) = @_[KERNEL, HEAP, ARG0];
+            $log->info("   POE::Session(".$heap->{alias}.") sending message\n");
+            $heap->{wheel}->send(encode_json($message));
+            $log->info("   Done\n");
+            return;
+        },
+
+        update => sub {
+            my ($kernel, $heap) = @_[KERNEL, HEAP];
+            # Nothing
+            $log->info("POE::Session(".$heap->{alias}.") update\n");
+            return;
+        },
+    },
+);
+$log->info("done\n");
+
+POE::Kernel->run();
 

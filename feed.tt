@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+    body {
+        margin:0;padding:0;
+        font-size: 11pt;
+        font-family: Helvetica, sans-serif;
+    }
+    a {
+    }
+    h2 { font-size: 13pt; }
+    div.new { background:#ccc; }
+    div.message { padding:12px; border-bottom: 1px solid #333;}
+    div.time {
+        font-size:9pt;
+    }
+</style>
+</head>
+<body>
+[% FOREACH message IN messages %]
+<div class="message [% IF message.new %]new[% END %]">
+<div class="time">On [% human_readable(message.timestamp) %] in [% message.feed.title || message.feed.url %]</div>
+    [% IF message.link %]<a href='[% message.link %]'>[% END %][% IF message.title %][% message.title %][% ELSE %][% message.timestamp %][% END %][% IF message.link %]</a>.[% END %]
+    [% message.message|html %]
+</div>
+[% END %]
+</body>
+</html>

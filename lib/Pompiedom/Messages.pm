@@ -3,6 +3,8 @@ use 5.10.0;
 use strict;
 use warnings;
 
+use Template;
+
 my @global_messages;
 my %uniques;
 
@@ -16,37 +18,43 @@ sub insert_message {
 
     if (!defined($uniques{$message->{id}})) {
         push @global_messages, $message;
+        print "Added new message:\n";
+        print "  " . ($message->{title} || $message->{link}) . "\n";
+
+        $message->{new} = 1;
         $uniques{$message->{id}} = 1;
     }
 
     return;
 }
 
-sub add_network {
-    my ($self, $network) = @_;
-    push @{$self->{networks}}, $network;
-    return;
-}
-
 sub update {
-    my ($self, $simplelist) = @_;
-    say 'Update called';
-
-    for my $network (@{$self->{networks}}) {
-        $network->get_messages($self);
-    }
+    my ($self, $webkit_view, $url) = @_;
 
     @global_messages = sort {$b->{timestamp} <=> $a->{timestamp}} @global_messages;
-    @{$simplelist->{data}} = ();
-    my $html = '<!DOCTYPE html><html><head><style>body{font-size:10pt;}</style></head><body>';
-    for (@global_messages) {
-        my $message = "<div style='margin:0;'>$_->{message}</div>\n<div style='font-size:9pt'>Posted by $_->{username}<br><a href='$_->{link}'>$_->{timestamp}</a></div><hr>";
-        $html.=$message;
-    }
-    $html.="</body></html>";
 
-    $simplelist->load_string($html, "text/html", "UTF-8", "http://peterstuifzand.com/");
-#$simplelist->load_uri("http://stuifzand.eu");
+    my $template = Template->new();
+
+    my $html = '';
+
+    $template->process('feed.tt', {
+            human_readable => sub {
+                my $dt = $_[0];
+                if (!$dt) {
+                    return;
+                }
+                
+                $dt->set_time_zone('Europe/Amsterdam');
+                return $dt->ymd . ' ' . $dt->hms;
+            },
+            messages => \@global_messages,
+    }, \$html) or die $template->error;
+
+    $webkit_view->load_string($html, "text/html", "UTF-8", "http://peterstuifzand.com/");
+
+    for (@global_messages) {
+        delete $_->{new};
+    }
 
     return;
 }
