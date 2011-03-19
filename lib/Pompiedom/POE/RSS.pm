@@ -80,19 +80,27 @@ sub build_session {
                 my $ft = DateTime::Format::RFC3339->new();
 
                 for my $entry ($feed->entries) {
-                    $kernel->post($heap->{output_alias},
-                        'insert_message', {
-                            id        => $entry->id,
-                            author    => scalar ($feed->author || $uri->host),
-                            timestamp => $ft->format_datetime($entry->issued),
-                            message   => $entry->content->body,
-                            link      => $entry->link,
-                            title     => $entry->title,
-                            feed      => {
-                                title => $feed->title,
-                                link  => $feed->link,
-                            }
-                        });
+                    my $message = {
+                        title     => $entry->title,
+                        base      => $entry->base,
+                        link      => $entry->link,
+                        message   => $entry->content->body,
+                        id        => $entry->id,
+                        author    => scalar ($feed->author || $uri->host),
+                        timestamp => $ft->format_datetime($entry->issued),
+                        feed      => {
+                            title => $feed->title,
+                            link  => $feed->link,
+                        }
+                    };
+                    if ($entry->enclosure) {
+                        $message->{enclosure} = {
+                            type   => $entry->enclosure->type,
+                            url    => $entry->enclosure->url,
+                            length => $entry->enclosure->length,
+                        };
+                    }
+                    $kernel->post($heap->{output_alias}, 'insert_message', $message);
                 }
                 $kernel->post($heap->{output_alias}, 'update');
                 $kernel->post(subscriptions => feed_updated => $uri);

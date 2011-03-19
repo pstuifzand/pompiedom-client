@@ -25,6 +25,7 @@ use Log::Dispatch;
 
 my $version_string = ZeroMQ::version();
 print "Starting with ZMQ $version_string\n";
+
 my $log = Log::Dispatch->new(
     outputs => [
         [ 'Screen', min_level => 'debug', stderr => 1 ],
@@ -81,7 +82,7 @@ POE::Session->create(
 
             for ($heap->{subscriptions}->subscriptions) {
                 $log->info("Update feed " . Dumper($_));
-                $kernel->yield('update_feed', $_);
+                $kernel->yield('update_feed', $_, { force => 1 });
             }
         },
 
@@ -96,7 +97,7 @@ POE::Session->create(
             say $url;
             $url = uri_unescape($url);
 
-            $_[KERNEL]->yield('update_feed', $url);
+            $_[KERNEL]->yield('update_feed', $url, { force => 1 });
 
             $resp->done;
         },
@@ -125,14 +126,15 @@ POE::Session->create(
         },
 
         update_feed => sub {
-            my ($kernel, $heap, $url) = @_[KERNEL, HEAP, ARG0];
+            my ($kernel, $heap, $url, $options) = @_[KERNEL, HEAP, ARG0, ARG1];
+            $options ||= {};
             if (!$url) {
                 say 'Empty url error in update_feed';
                 return;
             }
             my $subs = $heap->{subscriptions};
 
-            if ($subs->need_update($url)) {
+            if ($options->{force} || $subs->need_update($url)) {
                 print "Feed $url needs update\n";
                 $kernel->post('feed-reader' => 'update_feed' => $url);
             }

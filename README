@@ -1,11 +1,62 @@
-WARNING
-=======
-
-Alpha software. Use at your own risk.
-
-Uses GladeXML
+# Pompiedom
 
 This program currently receives messages from multiple URLs and combines them
 in one list.
 
-The post functionality and the statusbar information are not working.
+## WARNING
+
+Alpha software. Use at your own risk.
+
+* Uses Gtk2 / GladeXML / GtkWebKit
+* Uses POE
+* Uses 0MQ
+
+
+## Client Server communications
+
+The server sends the following message to the all clients, that are subscribed.
+The server uses [0MQ][] and the client should use it to. The message is send
+using ZMQ_PUB/ZMQ_SUB and encoded in JSON format. The fields are described
+below.
+
+[0MQ]: http://zeromq.org
+
+### Message format
+
+The structure below describes the message format that is published to
+all clients. Multiple clients can subscribe.
+
+    message:
+        title:
+        base:
+        link:
+        message:
+        id:
+        author:
+        timestamp: Formatted as RFC3339 date
+        feed:
+            title:
+            link:
+        enclosure: (optional)
+            type:
+            url:
+            length:
+
+
+## Config format 'subscriptions.yml'
+
+The file `subscriptions.yml` is a YAML file, that should contain the following items.
+And should look like this. Each url on it's own line with a ': ~' at the end. This
+allows the server to write when the feeds were last updated.
+
+    ---
+    http://peterstuifzand.com/posts/rss: ~
+    http://static.reallysimple.org/users/dave/linkblog.xml: ~
+
+
+## LICENSE
+
+This software is licensed under the [GNU GPL3 license][GPL3].
+
+[GPL3]: http://gnu.org/licenses/gpl.html
+
