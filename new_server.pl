@@ -28,7 +28,7 @@ print "Starting with ZMQ $version_string\n";
 
 my $log = Log::Dispatch->new(
     outputs => [
-        [ 'Screen', min_level => 'debug', stderr => 1 ],
+        [ 'Screen', min_level => 'warning', stderr => 1 ],
         [ 'File',   min_level => 'debug', filename => 'pompiedom.log' ],
     ],
 );
@@ -36,7 +36,7 @@ my $log = Log::Dispatch->new(
 $log->warning("Loading settings.yml\n");
 my $settings = LoadFile('settings.yml');
 
-$log->info("Spawning POEx::HTTP::Server ");
+$log->debug("Spawning POEx::HTTP::Server ");
 POEx::HTTP::Server->spawn(
     inet => {
         BindPort => 5337,
@@ -46,22 +46,22 @@ POEx::HTTP::Server->spawn(
         '^/notify$', 'poe:subscriptions/notify',
     },
 );
-$log->info("done\n");
+$log->debug("done\n");
 
-$log->info("Spawning POE::Component::Client::HTTP ");
+$log->debug("Spawning POE::Component::Client::HTTP ");
 POE::Component::Client::HTTP->spawn(
     Alias => 'ua',
 );
-$log->info("done\n");
+$log->debug("done\n");
 
-$log->info("Spawning Pompiedom::POE::RSS ");
+$log->debug("Spawning Pompiedom::POE::RSS ");
 Pompiedom::POE::RSS->spawn(
     output_alias => 'to_client',
     %{$settings}
 );
-$log->info("done\n");
+$log->debug("done\n");
 
-$log->info("Spawning POE::Session(subscriptions) ");
+$log->debug("Spawning POE::Session(subscriptions) ");
 POE::Session->create(
     inline_states => {
         _start => sub {
@@ -77,11 +77,11 @@ POE::Session->create(
         init_subscriptions => sub {
             my ($kernel, $heap) = @_[KERNEL, HEAP];
 
-            $log->info("[init_subscriptions]\n");
+            $log->debug("[init_subscriptions]\n");
             $heap->{subscriptions}->load_subscriptions();
 
             for ($heap->{subscriptions}->subscriptions) {
-                $log->info("Update feed " . Dumper($_));
+                $log->debug("Update feed " . Dumper($_));
                 $kernel->yield('update_feed', $_, { force => 1 });
             }
         },
@@ -152,32 +152,32 @@ POE::Session->create(
         },
     },
 );
-$log->info("done\n");
+$log->debug("done\n");
 
-$log->info("Spawning POE::Session(expected: to_client)\n");
+$log->debug("Spawning POE::Session(expected: to_client)\n");
 POE::Session->create(
     heap => { alias => 'to_client' },
 
     inline_states => {
         _start => sub {
             my ($kernel, $heap) = @_[KERNEL,HEAP];
-            $log->info("Starting POE::Session(".$heap->{alias}.")\n");
+            $log->debug("Starting POE::Session(".$heap->{alias}.")\n");
 
             $kernel->alias_set($heap->{alias});
 
             my $ctx = ZeroMQ::Context->new();
 
-            $log->info("  Spawning POE::Wheel::ZeroMQ\n");
+            $log->debug("  Spawning POE::Wheel::ZeroMQ\n");
             $heap->{wheel} = POE::Wheel::ZeroMQ->new(
                 SocketType => ZMQ_PUB,
                 SocketBind => 'tcp://127.0.0.1:55559',
                 Context    => $ctx,
             );
-            $log->info("  Done\n");
+            $log->debug("  Done\n");
 
             $heap->{ctx} = $ctx;
 
-            $log->info(" Done\n");
+            $log->debug(" Done\n");
 
         },
 
@@ -187,21 +187,19 @@ POE::Session->create(
 
         insert_message => sub {
             my ($kernel, $heap, $message) = @_[KERNEL, HEAP, ARG0];
-            $log->info("   POE::Session(".$heap->{alias}.") sending message\n");
             $heap->{wheel}->send(encode_json($message));
-            $log->info("   Done\n");
             return;
         },
 
         update => sub {
             my ($kernel, $heap) = @_[KERNEL, HEAP];
             # Nothing
-            $log->info("POE::Session(".$heap->{alias}.") update\n");
+            $log->debug("POE::Session(".$heap->{alias}.") update\n");
             return;
         },
     },
 );
-$log->info("done\n");
+$log->debug("done\n");
 
 POE::Kernel->run();
 

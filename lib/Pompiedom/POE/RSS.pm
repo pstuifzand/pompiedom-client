@@ -31,7 +31,6 @@ sub build_session {
     return POE::Session->create(
         args => [ $self->{options}{output_alias} ],
         inline_states => {
-
             _start => sub {
                 my ($kernel, $heap, $arg) = @_[KERNEL, HEAP, ARG0];
                 $kernel->alias_set('feed-reader');
@@ -40,20 +39,18 @@ sub build_session {
             _stop => sub {
                 print "feed-reader stopped\n";
             },
-            shutdown => sub {
+            'shutdown' => sub {
                 $_[KERNEL]->alias_remove('feed-reader');
             },
-
             update_feed => sub {
                 my ($kernel, $heap, $url) = @_[KERNEL,HEAP,ARG0];
                 print "update_feed URL: " . $url . "\n";
-                my $req = HTTP::Request->new(GET => $url, [ 'Accept-Encoding' => 'gzip' ]);
+                my $req = HTTP::Request->new(GET => $url);
                 $kernel->post('ua', 'request', 'parse_feed', $req);
             },
             parse_feed => sub {
                 my ($kernel, $heap, $request_packet, $response_packet) = @_[KERNEL, HEAP, ARG0, ARG1];
                 print "Parse_Feed called\n";
-
                 my $req = $request_packet->[0];
                 my $uri = $req->uri;
                 print " for " . $uri->as_string . "\n";
@@ -66,15 +63,12 @@ sub build_session {
                     warn "Not feed\n";
                     return;
                 }
-                if (!$feed->{rss}) {
-                    warn "Not feed.rss\n";
-                    return;
-                }
-
-                my $cloud = $feed->{rss}->channel('cloud');
-                if ($cloud) {
-                    print "Cloud enabled feed " . Dumper($cloud);
-                    $kernel->post(subscriptions => subscribe_cloud => $uri, $cloud);
+                if ($feed->{rss}) {
+                    my $cloud = $feed->{rss}->channel('cloud');
+                    if ($cloud) {
+                        print "Cloud enabled feed " . Dumper($cloud);
+                        $kernel->post(subscriptions => subscribe_cloud => $uri, $cloud);
+                    }
                 }
 
                 my $ft = DateTime::Format::RFC3339->new();
@@ -105,7 +99,6 @@ sub build_session {
                 $kernel->post($heap->{output_alias}, 'update');
                 $kernel->post(subscriptions => feed_updated => $uri);
             },
-
             post_message => sub {
                 my ($kernel, $heap, $post) = @_[KERNEL,HEAP,ARG0,ARG1];
 
@@ -128,7 +121,6 @@ sub build_session {
                 $req->content('text='.uri_escape($post->{description}).'&title='.uri_escape($post->{title}).'&link='.uri_escape($post->{link}));
                 $kernel->post('ua', 'request', 'message_received', $req);
             },
-
             subscribe_cloud => sub {
                 my ($kernel, $heap, $url, $cloud) = @_[KERNEL,HEAP,ARG0,ARG1];
                 # Subscribing every 24 hours is enough

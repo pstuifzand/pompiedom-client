@@ -62,7 +62,7 @@ sub ui_start {
     $view->show_all;
     $heap->{view} = $view;
 
-    $view->load_string("<p>No messages received</p>", "text/html", "UTF-8", "http://peterstuifzand.com/");
+    $view->load_string("<div id='anchor'></div><div id='end-anchor'></div><p>No messages received</p>", "text/html", "UTF-8", "http://peterstuifzand.com/");
 
     my $messages = Pompiedom::Messages->new();
     $heap->{messages} = $messages;
@@ -72,12 +72,13 @@ sub ui_start {
 
 sub insert_message {
     my ($kernel, $session, $heap, $message) = @_[KERNEL, SESSION, HEAP, ARG0];
-    $heap->{messages}->insert_message($message);
+    $heap->{messages}->insert_message($message, $heap->{view});
     return;
 }
 sub update {
     my ($kernel, $session, $heap) = @_[KERNEL, SESSION, HEAP];
-    $heap->{messages}->update($heap->{view});
+    my $scrolled = $session->gladexml->get_widget('scrolledwindow2');
+    $heap->{messages}->update($heap->{view}, $scrolled);
     return;
 }
 

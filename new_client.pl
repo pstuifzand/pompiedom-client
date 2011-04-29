@@ -19,14 +19,14 @@ use DateTime::Format::RFC3339;
 
 my $log = Log::Dispatch->new(
     outputs => [
-        [ 'Screen', min_level => 'debug', stderr => 1 ],
+        [ 'Screen', min_level => 'warning', stderr => 1 ],
         [ 'File',   min_level => 'debug', filename => 'pompiedom-client.log' ],
     ],
 );
 
 Pompiedom::Client->new();
 
-$log->info("Spawning POE::Session(from_server)\n");
+$log->debug("Spawning POE::Session(from_server)\n");
 POE::Session->create(
     inline_states => {
         _start => sub {
@@ -35,7 +35,7 @@ POE::Session->create(
 
             my $ctx = ZeroMQ::Context->new();
 
-            $log->info(" Spawning POE::Wheel::ZeroMQ\n");
+            $log->debug(" Spawning POE::Wheel::ZeroMQ\n");
             $heap->{wheel} = POE::Wheel::ZeroMQ->new(
                 SocketType    => ZMQ_SUB,
                 SocketConnect => 'tcp://127.0.0.1:55559',
@@ -45,7 +45,10 @@ POE::Session->create(
                 Context       => $ctx,
             );
             $heap->{ctx} = $ctx;
-            $log->info(" Done\n");
+
+            $kernel->delay('update_screen', 5);
+
+            $log->debug(" Done\n");
         },
 
         _stop => sub {
@@ -55,18 +58,23 @@ POE::Session->create(
 
         on_data_recieved => sub {
             my ($kernel, $heap, $messages) = @_[KERNEL, HEAP, ARG0];
-            $log->info("on_data_recieved\n");
+            $log->debug("on_data_recieved\n");
 
             my $f = DateTime::Format::RFC3339->new();
 
             for my $msg (@$messages) {
-                $log->info(localtime()." message recieved\n");
+                $log->debug(localtime()." message recieved\n");
                 my $message = decode_json($msg->data);
                 $message->{timestamp} = $f->parse_datetime($message->{timestamp});
                 $kernel->post('pompiedom', 'insert_message', $message);
             }
+            $log->debug(localtime()." updates complete\n");
+        },
+        update_screen => sub {
+            my ($kernel, $heap) = @_[KERNEL,HEAP];
             $kernel->post('pompiedom', 'update');
-            $log->info(localtime()." updates complete\n");
+            $kernel->delay('update_screen', 5);
+            return;
         },
         ping => sub {
             my ($kernel, $heap) = @_[KERNEL,HEAP];
@@ -74,6 +82,6 @@ POE::Session->create(
         },
     },
 );
-$log->info("Done\n");
+$log->debug("Done\n");
 
 POE::Kernel->run();
